@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.env
+logs/
+data/raw/          # optional, for privacy
+models/*.pkl       # optional, if using model registry
+.DS_Store
+*.log
+.streamlit/

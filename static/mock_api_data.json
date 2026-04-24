@@ -1,0 +1,57 @@
+[
+  {
+    "timestamp": "2026-04-24T10:00:00Z",
+    "metrics": {
+      "value": 150,
+      "category": "Alpha"
+    },
+    "filters": {
+      "region": "North America",
+      "type": "Revenue"
+    }
+  },
+  {
+    "timestamp": "2026-04-24T10:00:00Z",
+    "metrics": {
+      "value": 300,
+      "category": "Beta"
+    },
+    "filters": {
+      "region": "North America",
+      "type": "Revenue"
+    }
+  },
+  {
+    "timestamp": "2026-04-24T10:00:00Z",
+    "metrics": {
+      "value": 200,
+      "category": "Gamma"
+    },
+    "filters": {
+      "region": "North America",
+      "type": "Revenue"
+    }
+  },
+  {
+    "timestamp": "2026-04-24T10:00:00Z",
+    "metrics": {
+      "value": 450,
+      "category": "Delta"
+    },
+    "filters": {
+      "region": "North America",
+      "type": "Revenue"
+    }
+  },
+  {
+    "timestamp": "2026-04-24T10:00:00Z",
+    "metrics": {
+      "value": 120,
+      "category": "Epsilon"
+    },
+    "filters": {
+      "region": "North America",
+      "type": "Revenue"
+    }
+  }
+]

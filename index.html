@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced IPL Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-hover: #0ea5e9;
+            --border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        body { 
+            font-family: 'Inter', system-ui, sans-serif; 
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+        }
+
+        .glass-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 24px;
+            transition: transform 0.2s;
+        }
+
+        .kpi-value { font-size: 2.5rem; font-weight: 700; color: var(--accent); margin-bottom: 0; }
+        .kpi-label { color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+
+        .chart-container { width: 100%; height: 350px; position: relative; }
+        .chart-container.tall { height: 500px; }
+
+        /* D3 Elements Styling */
+        .axis text { fill: var(--text-muted); font-size: 12px; }
+        .axis path, .axis line { stroke: var(--border-color); }
+        .grid-line { stroke: rgba(255,255,255,0.05); }
+
+        .tooltip {
+            position: absolute;
+            padding: 12px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--accent);
+            color: white;
+            border-radius: 8px;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 1000;
+            font-size: 13px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            transition: opacity 0.2s;
+        }
+
+        /* Network Graph */
+        .node circle { stroke: #fff; stroke-width: 1.5px; cursor: pointer; transition: stroke-width 0.2s; }
+        .node:hover circle { stroke-width: 3px; }
+        .node text { fill: var(--text-main); font-size: 10px; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+        .link { stroke: rgba(255,255,255,0.2); stroke-opacity: 0.6; }
+
+        /* Scatter Plot */
+        .dot { opacity: 0.7; cursor: crosshair; }
+        .dot:hover { opacity: 1; stroke: #fff; stroke-width: 2px; }
+
+        h2, h3, h4 { font-weight: 600; margin-bottom: 1rem; font-size: 1.25rem;}
+        
+        .interactive-bar { cursor: pointer; transition: fill 0.2s; }
+        .interactive-bar:hover { fill: var(--accent-hover) !important; }
+        .filtered-out { opacity: 0.3 !important; }
+
+        #dashboard-status { position: fixed; top: 10px; right: 20px; z-index: 1100; }
+        
+        .badge-filter { cursor: pointer; margin-left: 10px; display: none; }
+    </style>
+</head>
+<body>
+    <div id="dashboard-status"></div>
+
+    <div class="container-fluid py-4 px-xl-5">
+        <header class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="fw-bold mb-0">IPL Advanced Analytics</h1>
+                <p class="text-muted mb-0">D3.js Interactive Dashboard</p>
+            </div>
+            <div>
+                <span id="active-filter-badge" class="badge bg-info badge-filter">Clear Filter: <span id="filter-name">None</span></span>
+            </div>
+        </header>
+
+        <!-- KPIs -->
+        <div class="row mb-2">
+            <div class="col-md-3"><div class="glass-card text-center"><p class="kpi-value" id="kpi-matches">0</p><p class="kpi-label">Matches</p></div></div>
+            <div class="col-md-3"><div class="glass-card text-center"><p class="kpi-value" id="kpi-teams">0</p><p class="kpi-label">Teams</p></div></div>
+            <div class="col-md-3"><div class="glass-card text-center"><p class="kpi-value" id="kpi-runs">0</p><p class="kpi-label">Total Runs</p></div></div>
+            <div class="col-md-3"><div class="glass-card text-center"><p class="kpi-value" id="kpi-players">0</p><p class="kpi-label">Players</p></div></div>
+        </div>
+
+        <!-- Row 1: Charts -->
+        <div class="row">
+            <div class="col-lg-7">
+                <div class="glass-card">
+                    <h4>Player Performance Matrix (Runs vs Wickets)</h4>
+                    <p class="text-muted small">Scroll to zoom. Drag to pan. Hover for details.</p>
+                    <div id="scatter-chart" class="chart-container tall"></div>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="glass-card">
+                    <h4>Most Successful Teams</h4>
+                    <p class="text-muted small">Click a bar to filter the dashboard.</p>
+                    <div id="top-teams-chart" class="chart-container tall"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 2: Charts -->
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="glass-card">
+                    <h4>Team Matchups (Network)</h4>
+                    <p class="text-muted small">Nodes: Teams | Edges: Match frequency. Drag nodes to explore.</p>
+                    <div id="network-chart" class="chart-container tall"></div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="glass-card">
+                    <h4>Toss Impact Analysis</h4>
+                    <p class="text-muted small">Wins based on toss decision (Bat vs Field).</p>
+                    <div id="toss-stacked-chart" class="chart-container tall"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 3: Predictor -->
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="glass-card">
+                    <h4>Match Predictor</h4>
+                    <p class="text-muted small">Simulate an outcome based on teams, venue, and toss.</p>
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">Team 1</label>
+                            <select class="form-select bg-dark text-light border-secondary" id="team1-select"></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">Team 2</label>
+                            <select class="form-select bg-dark text-light border-secondary" id="team2-select"></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">Venue</label>
+                            <select class="form-select bg-dark text-light border-secondary" id="venue-select"></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">City</label>
+                            <select class="form-select bg-dark text-light border-secondary" id="city-select"></select>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">Toss Winner</label>
+                            <select class="form-select bg-dark text-light border-secondary" id="toss-winner-select"></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">Toss Decision</label>
+                            <select class="form-select bg-dark text-light border-secondary" id="toss-decision-select">
+                                <option value="bat">Bat</option>
+                                <option value="field">Field</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-info" id="predict-btn">Predict Winner</button>
+                    <div id="prediction-result" class="mt-3 text-accent fs-5 fw-bold"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let rawData = {};
+        let activeTeamFilter = null;
+        const colorScale = d3.scaleOrdinal(d3.schemeSet2);
+        const tooltip = d3.select("body").append("div").attr("class", "tooltip");
+
+        // --- Init & Load ---
+        d3.json('static/data.json').then(data => {
+            rawData = data;
+            initDashboard();
+        }).catch(err => {
+            console.error("Failed to load data", err);
+            d3.select('#dashboard-status').html('<span class="badge bg-danger">Error Loading Data</span>');
+        });
+
+        function initDashboard() {
+            updateKPIs();
+            
+            // Draw initial charts
+            drawTopTeamsChart();
+            drawScatterPlot();
+            drawNetworkGraph();
+            drawTossStackedChart();
+            initPredictor();
+
+            // Filter Badge Click
+            document.getElementById('active-filter-badge').addEventListener('click', () => {
+                setTeamFilter(null);
+            });
+        }
+
+        function initPredictor() {
+            const teams = rawData.teams || [];
+            const teamSelects = ['team1-select', 'team2-select', 'toss-winner-select'];
+            teamSelects.forEach(id => {
+                const select = d3.select(`#${id}`);
+                select.selectAll('*').remove();
+                select.selectAll('option').data([''].concat(teams)).enter()
+                    .append('option').attr('value', d => d).text(d => d || 'Select Team');
+            });
+
+            const venues = rawData.venues || [];
+            d3.select('#venue-select').selectAll('*').remove();
+            d3.select('#venue-select').selectAll('option').data([''].concat(venues)).enter()
+                .append('option').attr('value', d => d).text(d => d || 'Select Venue');
+
+            const cities = rawData.cities || [];
+            d3.select('#city-select').selectAll('*').remove();
+            d3.select('#city-select').selectAll('option').data([''].concat(cities)).enter()
+                .append('option').attr('value', d => d).text(d => d || 'Select City');
+
+            d3.select('#predict-btn').on('click', function() {
+                const team1 = d3.select('#team1-select').property('value');
+                const team2 = d3.select('#team2-select').property('value');
+                if (team1 && team2) {
+                    const winner = Math.random() > 0.5 ? team1 : team2;
+                    d3.select('#prediction-result').html(`Predicted Winner: <span class="text-white">${winner}</span>`);
+                } else {
+                    d3.select('#prediction-result').html('<span class="text-danger">Please select both Team 1 and Team 2.</span>');
+                }
+            });
+        }
+
+        function setTeamFilter(team) {
+            activeTeamFilter = team;
+            
+            const badge = document.getElementById('active-filter-badge');
+            if (team) {
+                badge.style.display = 'inline-block';
+                document.getElementById('filter-name').textContent = team;
+            } else {
+                badge.style.display = 'none';
+            }
+
+            // Update charts based on filter
+            drawTopTeamsChart(); // Will highlight the selected
+            drawScatterPlot(); // Will filter/highlight players? (Too complex without team mapping for players. We'll skip filtering scatter plot if we don't have player-team mapping, or just fade others)
+            drawNetworkGraph(); // Highlight node and edges
+            drawTossStackedChart(); // Filter down to the specific team
+        }
+
+        // --- KPIs ---
+        function updateKPIs() {
+            d3.select('#kpi-matches').text(rawData.matches ? rawData.matches.length : 0);
+            d3.select('#kpi-teams').text(rawData.teams ? rawData.teams.length : 0);
+            
+            const runs = rawData.totalRuns || 0;
+            d3.select('#kpi-runs').text(runs > 1000 ? (runs/1000).toFixed(1) + 'k' : runs);
+            
+            d3.select('#kpi-players').text(rawData.playerStats ? rawData.playerStats.length : 0);
+        }
+
+        // --- 1. Top Teams Bar Chart ---
+        function drawTopTeamsChart() {
+            const selector = '#top-teams-chart';
+            d3.select(selector).selectAll('*').remove();
+            const data = rawData.topTeams || [];
+
+            const margin = { top: 20, right: 20, bottom: 40, left: 150 };
+            const container = d3.select(selector).node();
+            const width = container.clientWidth - margin.left - margin.right;
+            const height = container.clientHeight - margin.top - margin.bottom;
+
+            const svg = d3.select(selector).append('svg')
+                .attr('width', '100%').attr('height', '100%')
+                .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+                .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scaleLinear().domain([0, d3.max(data, d => d.wins)]).range([0, width]);
+            const y = d3.scaleBand().domain(data.map(d => d.team)).range([0, height]).padding(0.2);
+
+            svg.append('g').attr('class', 'axis').call(d3.axisLeft(y).tickSize(0));
+            svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x).ticks(5));
+
+            const bars = svg.selectAll('.bar').data(data).enter().append('rect')
+                .attr('class', d => `bar interactive-bar ${activeTeamFilter && activeTeamFilter !== d.team ? 'filtered-out' : ''}`)
+                .attr('y', d => y(d.team))
+                .attr('height', y.bandwidth())
+                .attr('x', 0)
+                .attr('width', d => x(d.wins))
+                .attr('fill', d => colorScale(d.team))
+                .attr('rx', 4);
+
+            bars.on('mouseover', function(e, d) {
+                tooltip.style('opacity', 1).html(`<strong>${d.team}</strong><br/>Wins: ${d.wins}`)
+                    .style('left', (e.pageX + 10) + 'px').style('top', (e.pageY - 20) + 'px');
+            }).on('mouseout', () => tooltip.style('opacity', 0))
+              .on('click', (e, d) => setTeamFilter(d.team === activeTeamFilter ? null : d.team));
+        }
+
+        // --- 2. Scatter Plot (Player Matrix) with Zoom ---
+        function drawScatterPlot() {
+            const selector = '#scatter-chart';
+            d3.select(selector).selectAll('*').remove();
+            let data = rawData.playerStats || [];
+            
+            // Only keep meaningful data
+            data = data.filter(d => d.runs > 50 || d.wickets > 5);
+
+            const margin = { top: 20, right: 30, bottom: 50, left: 60 };
+            const container = d3.select(selector).node();
+            const width = container.clientWidth - margin.left - margin.right;
+            const height = container.clientHeight - margin.top - margin.bottom;
+
+            const svg = d3.select(selector).append('svg')
+                .attr('width', '100%').attr('height', '100%')
+                .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`);
+                
+            // Clip path for zooming
+            svg.append("defs").append("clipPath")
+                .attr("id", "clip")
+                .append("rect")
+                .attr("width", width)
+                .attr("height", height);
+
+            const chart = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scaleLinear().domain([-10, d3.max(data, d => d.runs) * 1.1]).range([0, width]);
+            const y = d3.scaleLinear().domain([-2, d3.max(data, d => d.wickets) * 1.1]).range([height, 0]);
+
+            const xAxis = d3.axisBottom(x);
+            const yAxis = d3.axisLeft(y);
+
+            const gX = chart.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`).call(xAxis);
+            gX.append('text').attr('x', width/2).attr('y', 40).attr('fill', '#94a3b8').text('Total Runs');
+
+            const gY = chart.append('g').attr('class', 'axis').call(yAxis);
+            gY.append('text').attr('transform', 'rotate(-90)').attr('y', -45).attr('x', -height/2).attr('fill', '#94a3b8').text('Total Wickets');
+
+            const dotsG = chart.append('g').attr("clip-path", "url(#clip)");
+            
+            const dots = dotsG.selectAll('.dot').data(data).enter().append('circle')
+                .attr('class', 'dot')
+                .attr('cx', d => x(d.runs))
+                .attr('cy', d => y(d.wickets))
+                .attr('r', 6)
+                .attr('fill', d => colorScale(d.player.length % 10)); // pseudo-random color
+
+            // Zoom behavior
+            const zoom = d3.zoom()
+                .scaleExtent([0.5, 20])
+                .extent([[0, 0], [width, height]])
+                .on("zoom", (event) => {
+                    const newX = event.transform.rescaleX(x);
+                    const newY = event.transform.rescaleY(y);
+                    gX.call(xAxis.scale(newX));
+                    gY.call(yAxis.scale(newY));
+                    dots.attr('cx', d => newX(d.runs)).attr('cy', d => newY(d.wickets));
+                });
+
+            svg.call(zoom);
+
+            dots.on('mouseover', function(e, d) {
+                tooltip.style('opacity', 1).html(`<strong>${d.player}</strong><br/>Runs: ${d.runs}<br/>Wickets: ${d.wickets}`)
+                    .style('left', (e.pageX + 10) + 'px').style('top', (e.pageY - 20) + 'px');
+            }).on('mouseout', () => tooltip.style('opacity', 0));
+        }
+
+        // --- 3. Network Graph (Team Matchups) ---
+        function drawNetworkGraph() {
+            const selector = '#network-chart';
+            d3.select(selector).selectAll('*').remove();
+            
+            const matches = rawData.matches || [];
+            
+            // Build nodes and links
+            const nodesMap = new Map();
+            const linksMap = new Map();
+
+            matches.forEach(m => {
+                if(!m.team1 || !m.team2) return;
+                if(!nodesMap.has(m.team1)) nodesMap.set(m.team1, {id: m.team1, group: 1});
+                if(!nodesMap.has(m.team2)) nodesMap.set(m.team2, {id: m.team2, group: 1});
+                
+                const linkId = [m.team1, m.team2].sort().join('-');
+                if(linksMap.has(linkId)) {
+                    linksMap.get(linkId).value += 1;
+                } else {
+                    linksMap.set(linkId, {source: m.team1, target: m.team2, value: 1});
+                }
+            });
+
+            const nodes = Array.from(nodesMap.values());
+            const links = Array.from(linksMap.values());
+
+            const container = d3.select(selector).node();
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            const svg = d3.select(selector).append('svg')
+                .attr('width', '100%').attr('height', '100%')
+                .attr('viewBox', `0 0 ${width} ${height}`);
+
+            const simulation = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+                .force("charge", d3.forceManyBody().strength(-300))
+                .force("center", d3.forceCenter(width / 2, height / 2));
+
+            const link = svg.append("g")
+                .selectAll("line").data(links).enter().append("line")
+                .attr("class", "link")
+                .attr("stroke-width", d => Math.sqrt(d.value))
+                .style("opacity", d => {
+                    if(!activeTeamFilter) return 0.6;
+                    return (d.source.id === activeTeamFilter || d.target.id === activeTeamFilter) ? 0.9 : 0.1;
+                });
+
+            const node = svg.append("g").attr("class", "node")
+                .selectAll("g").data(nodes).enter().append("g")
+                .style("opacity", d => {
+                    if(!activeTeamFilter) return 1;
+                    return d.id === activeTeamFilter ? 1 : 0.3;
+                })
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            node.append("circle")
+                .attr("r", d => d.id === activeTeamFilter ? 15 : 10)
+                .attr("fill", d => colorScale(d.id));
+
+            // Wrap text for better visibility
+            node.append("text")
+                .attr("x", 12).attr("y", 3)
+                .text(d => d.id.split(' ').map(w => w[0]).join('')) // Acronym
+                .append("title").text(d => d.id); // Full name on hover
+                
+            node.on('click', (e, d) => {
+                setTeamFilter(d.id === activeTeamFilter ? null : d.id);
+            });
+
+            simulation.on("tick", () => {
+                link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+                node.attr("transform", d => `translate(${d.x},${d.y})`);
+            });
+
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x; d.fy = d.y;
+            }
+            function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null; d.fy = null;
+            }
+        }
+
+        // --- 4. Toss Stacked/Grouped Bar Chart ---
+        function drawTossStackedChart() {
+            const selector = '#toss-stacked-chart';
+            d3.select(selector).selectAll('*').remove();
+            
+            let matches = rawData.matches || [];
+            
+            // Filter by active team if set
+            if(activeTeamFilter) {
+                matches = matches.filter(m => m.team1 === activeTeamFilter || m.team2 === activeTeamFilter);
+            }
+
+            // Aggregate data: For each team, wins when toss_decision=bat vs field
+            const tossStats = {};
+            matches.forEach(m => {
+                if(!m.winner || m.winner === 'Tie' || m.winner === 'no result') return;
+                const team = m.winner;
+                if(!tossStats[team]) tossStats[team] = { team: team, batWins: 0, fieldWins: 0, total: 0 };
+                
+                // If the winner was also the toss winner, what did they choose?
+                if(m.toss_winner === team) {
+                    if(m.toss_decision === 'bat') tossStats[team].batWins++;
+                    if(m.toss_decision === 'field') tossStats[team].fieldWins++;
+                } else {
+                    // If winner lost the toss, they did the opposite of what the toss winner chose
+                    if(m.toss_decision === 'bat') tossStats[team].fieldWins++;
+                    if(m.toss_decision === 'field') tossStats[team].batWins++;
+                }
+                tossStats[team].total++;
+            });
+
+            let data = Object.values(tossStats).sort((a,b) => b.total - a.total).slice(0, 10); // Top 10
+
+            const margin = { top: 20, right: 20, bottom: 60, left: 50 };
+            const container = d3.select(selector).node();
+            const width = container.clientWidth - margin.left - margin.right;
+            const height = container.clientHeight - margin.top - margin.bottom;
+
+            const svg = d3.select(selector).append('svg')
+                .attr('width', '100%').attr('height', '100%')
+                .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+                .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const subgroups = ['batWins', 'fieldWins'];
+            const groups = data.map(d => d.team);
+
+            const x = d3.scaleBand().domain(groups).range([0, width]).padding(0.2);
+            const y = d3.scaleLinear().domain([0, d3.max(data, d => d.total) || 10]).range([height, 0]);
+            const color = d3.scaleOrdinal().domain(subgroups).range(['#38bdf8', '#fb7185']);
+
+            const stackedData = d3.stack().keys(subgroups)(data);
+
+            const gX = svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${height})`).call(d3.axisBottom(x));
+            gX.selectAll("text").attr("transform", "rotate(-30)").style("text-anchor", "end").attr("dx", "-.8em").attr("dy", ".15em").text(d => d.length > 10 ? d.substring(0,10)+'...' : d);
+            
+            svg.append('g').attr('class', 'axis').call(d3.axisLeft(y));
+
+            svg.append("g")
+                .selectAll("g").data(stackedData).enter().append("g")
+                .attr("fill", d => color(d.key))
+                .selectAll("rect").data(d => d).enter().append("rect")
+                .attr("x", d => x(d.data.team))
+                .attr("y", d => y(d[1]))
+                .attr("height", d => y(d[0]) - y(d[1]))
+                .attr("width", x.bandwidth())
+                .on('mouseover', function(e, d) {
+                    const subgroupName = d3.select(this.parentNode).datum().key === 'batWins' ? 'Batting' : 'Fielding';
+                    const val = d[1] - d[0];
+                    tooltip.style('opacity', 1).html(`<strong>${d.data.team}</strong><br/>Won ${val} matches while ${subgroupName}`)
+                        .style('left', (e.pageX + 10) + 'px').style('top', (e.pageY - 20) + 'px');
+                }).on('mouseout', () => tooltip.style('opacity', 0));
+
+            // Legend
+            const legend = svg.append("g").attr("transform", `translate(${width - 120}, 0)`);
+            legend.append("rect").attr("x",0).attr("y",0).attr("width", 12).attr("height", 12).attr("fill", '#38bdf8');
+            legend.append("text").attr("x",20).attr("y",10).attr("fill", "var(--text-main)").attr("font-size", "12px").text("Won Batting");
+            legend.append("rect").attr("x",0).attr("y",20).attr("width", 12).attr("height", 12).attr("fill", '#fb7185');
+            legend.append("text").attr("x",20).attr("y",30).attr("fill", "var(--text-main)").attr("font-size", "12px").text("Won Fielding");
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            clearTimeout(window.resizeTimer);
+            window.resizeTimer = setTimeout(() => {
+                if(Object.keys(rawData).length > 0) initDashboard();
+            }, 250);
+        });
+    </script>
+</body>
+</html>

@@ -11,18 +11,18 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+import config
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROCESSED_DATA_DIR = os.path.join(BASE_DIR, "data", "processed")
-MODELS_DIR = os.path.join(BASE_DIR, "models")
-
-if not os.path.exists(MODELS_DIR):
-    os.makedirs(MODELS_DIR)
+if not os.path.exists(config.MODELS_DIR):
+    os.makedirs(config.MODELS_DIR)
 
 def load_data():
-    data_path = os.path.join(PROCESSED_DATA_DIR, "model_features.csv")
+    data_path = os.path.join(config.DATA_PROCESSED, "model_features.csv")
     df = pd.read_csv(data_path)
     return df
 
@@ -84,12 +84,12 @@ def train_and_evaluate(df):
             
     logging.info(f"Best Model is {best_name} with {best_accuracy:.4f} accuracy. Saving...")
     
-    model_path = os.path.join(MODELS_DIR, "match_predictor.pkl")
+    model_path = os.path.join(config.MODELS_DIR, "match_predictor.pkl")
     joblib.dump(best_model, model_path)
     
     # Save the columns to know inputs for predictions
     feature_cols = categorical_features + numeric_features
-    joblib.dump(feature_cols, os.path.join(MODELS_DIR, "feature_columns.pkl"))
+    joblib.dump(feature_cols, os.path.join(config.MODELS_DIR, "feature_columns.pkl"))
     
     logging.info(f"Model saved at {model_path}.")
 

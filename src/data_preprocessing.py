@@ -2,6 +2,11 @@ import os
 import glob
 import pandas as pd
 import logging
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+import config
+from utils import standardize_teams
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -28,14 +33,8 @@ def process_data(data_dir: str, output_dir: str):
             
     if df_list:
         deliveries_df = pd.concat(df_list, ignore_index=True)
-        # Handle some basic standardizations
-        deliveries_df['batting_team'] = deliveries_df['batting_team'].replace('Delhi Daredevils', 'Delhi Capitals')
-        deliveries_df['batting_team'] = deliveries_df['batting_team'].replace('Deccan Chargers', 'Sunrisers Hyderabad')
-        deliveries_df['batting_team'] = deliveries_df['batting_team'].replace('Kings XI Punjab', 'Punjab Kings')
-        
-        deliveries_df['bowling_team'] = deliveries_df['bowling_team'].replace('Delhi Daredevils', 'Delhi Capitals')
-        deliveries_df['bowling_team'] = deliveries_df['bowling_team'].replace('Deccan Chargers', 'Sunrisers Hyderabad')
-        deliveries_df['bowling_team'] = deliveries_df['bowling_team'].replace('Kings XI Punjab', 'Punjab Kings')
+        # Standardize team names
+        deliveries_df = standardize_teams(deliveries_df, ['batting_team', 'bowling_team'])
         
         deliveries_path = os.path.join(output_dir, "deliveries.csv")
         deliveries_df.to_csv(deliveries_path, index=False)
@@ -82,10 +81,7 @@ def process_data(data_dir: str, output_dir: str):
         matches_df = pd.DataFrame(match_list)
         
         # Standardize teams
-        for col in ['team1', 'team2', 'toss_winner', 'winner']:
-            matches_df[col] = matches_df[col].replace('Delhi Daredevils', 'Delhi Capitals')
-            matches_df[col] = matches_df[col].replace('Deccan Chargers', 'Sunrisers Hyderabad')
-            matches_df[col] = matches_df[col].replace('Kings XI Punjab', 'Punjab Kings')
+        matches_df = standardize_teams(matches_df, ['team1', 'team2', 'toss_winner', 'winner'])
         
         # Parse Dates
         matches_df['date'] = pd.to_datetime(matches_df['date'], errors='coerce')
@@ -98,8 +94,4 @@ def process_data(data_dir: str, output_dir: str):
         logging.warning("No matches extracted.")
 
 if __name__ == "__main__":
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    RAW_DATA_DIR = os.path.join(BASE_DIR, "data", "raw")
-    PROCESSED_DATA_DIR = os.path.join(BASE_DIR, "data", "processed")
-    
-    process_data(RAW_DATA_DIR, PROCESSED_DATA_DIR)
+    process_data(config.DATA_RAW, config.DATA_PROCESSED)

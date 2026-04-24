@@ -4,19 +4,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import logging
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+import config
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROCESSED_DATA_DIR = os.path.join(BASE_DIR, "data", "processed")
-VISUALS_DIR = os.path.join(BASE_DIR, "visuals")
-
-if not os.path.exists(VISUALS_DIR):
-    os.makedirs(VISUALS_DIR)
+if not os.path.exists(config.VISUALS_DIR):
+    os.makedirs(config.VISUALS_DIR)
 
 def load_data():
-    matches_df = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, "matches.csv"))
-    deliveries_df = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, "deliveries.csv"))
+    matches_df = pd.read_csv(os.path.join(config.DATA_PROCESSED, "matches.csv"))
+    deliveries_df = pd.read_csv(os.path.join(config.DATA_PROCESSED, "deliveries.csv"))
     return matches_df, deliveries_df
 
 def run_eda(matches_df, deliveries_df):
@@ -30,7 +30,7 @@ def run_eda(matches_df, deliveries_df):
     plt.xlabel('Number of Wins')
     plt.ylabel('Team')
     plt.tight_layout()
-    plt.savefig(os.path.join(VISUALS_DIR, "most_successful_teams.png"))
+    plt.savefig(os.path.join(config.VISUALS_DIR, "most_successful_teams.png"))
     plt.close()
     
     # 2. Top Run Scorers
@@ -41,7 +41,7 @@ def run_eda(matches_df, deliveries_df):
     plt.xlabel('Total Runs')
     plt.ylabel('Batsman')
     plt.tight_layout()
-    plt.savefig(os.path.join(VISUALS_DIR, "top_run_scorers.png"))
+    plt.savefig(os.path.join(config.VISUALS_DIR, "top_run_scorers.png"))
     plt.close()
 
     # 3. Top Wicket Takers
@@ -55,7 +55,7 @@ def run_eda(matches_df, deliveries_df):
     plt.xlabel('Total Wickets')
     plt.ylabel('Bowler')
     plt.tight_layout()
-    plt.savefig(os.path.join(VISUALS_DIR, "top_wicket_takers.png"))
+    plt.savefig(os.path.join(config.VISUALS_DIR, "top_wicket_takers.png"))
     plt.close()
     
     # 4. Toss Decision Impact
@@ -63,7 +63,7 @@ def run_eda(matches_df, deliveries_df):
     toss_decision = matches_df['toss_decision'].value_counts()
     plt.pie(toss_decision, labels=toss_decision.index, autopct='%1.1f%%', colors=['#ff9999','#66b3ff'])
     plt.title('Toss Decision Percentage')
-    plt.savefig(os.path.join(VISUALS_DIR, "toss_decision_impact.png"))
+    plt.savefig(os.path.join(config.VISUALS_DIR, "toss_decision_impact.png"))
     plt.close()
     
 def feature_engineering(matches_df):
@@ -91,12 +91,13 @@ def feature_engineering(matches_df):
     
     features_df = df[['id', 'season', 'team1', 'team2', 'venue', 'city', 'team1_won_toss', 'toss_decision_bat', 'target']].copy()
     
-    model_data_path = os.path.join(PROCESSED_DATA_DIR, "model_features.csv")
+    model_data_path = os.path.join(config.DATA_PROCESSED, "model_features.csv")
     features_df.to_csv(model_data_path, index=False)
     logging.info(f"Feature dataset saved to {model_data_path} with shape {features_df.shape}")
 
 if __name__ == "__main__":
     matches, deliveries = load_data()
     run_eda(matches, deliveries)
+    feature_engineering(matches)
     feature_engineering(matches)
     logging.info("EDA and Feature Engineering complete!")
